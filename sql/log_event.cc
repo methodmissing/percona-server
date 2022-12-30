@@ -74,6 +74,7 @@
 #include "sql/rpl_handler.h"  // RUN_HOOK
 #include "sql/rpl_tblmap.h"
 #include "sql/sql_show_processlist.h"  // pfs_processlist_enabled
+#include "sql/item_strfunc.h"
 #include "sql/system_variables.h"
 #include "sql/tc_log.h"
 #include "sql/xa/sql_cmd_xa.h"  // Sql_cmd_xa_*
@@ -990,6 +991,8 @@ const char *Log_event::get_type_str(Log_event_type type) {
       return "Transaction_payload";
     case binary_log::START_5_7_ENCRYPTION_EVENT:
       return "Start_5_7_encryption";
+    case binary_log::DOMAIN_EVENT:
+      return "Domain";
     default:
       return "Unknown"; /* impossible */
   }
@@ -14363,3 +14366,139 @@ std::pair<bool, binary_log::Log_event_basic_info> extract_log_event_basic_info(
       uint2korr(buf + FLAGS_OFFSET) & LOG_EVENT_IGNORABLE_F;
   return std::make_pair(false, event_info);
 }
+
+/*
+  Constructor used by slave to read the event from the binary log.
+ */
+Domain_log_event::Domain_log_event(
+    const char *buf, const Format_description_event *descr_event)
+    : binary_log::Domain_event(buf, descr_event),
+      Log_event(header(), footer()){
+  DBUG_TRACE;
+  if (!is_valid()) return;
+  common_header->flags |= LOG_EVENT_IGNORABLE_F;
+  assert(header()->type_code == binary_log::DOMAIN_EVENT);
+  assert(uuid == nullptr);
+  assert(name_length == 0 && name == nullptr);
+  assert(aggregate_type_length == 0 && aggregate_type == nullptr);
+  assert(aggregate_id_length == 0 && aggregate_id == nullptr);
+  assert(payload_length == 0 && payload == nullptr);
+}
+
+#ifdef MYSQL_SERVER
+  Domain_log_event::Domain_log_event(THD *thd, LEX_STRING name_arg, LEX_STRING aggregate_type_arg, LEX_STRING aggregate_id_arg, LEX_STRING payload_arg)
+      : binary_log::Domain_event(),
+        Log_event(thd, LOG_EVENT_IGNORABLE_F, Log_event::EVENT_TRANSACTIONAL_CACHE,
+                Log_event::EVENT_NORMAL_LOGGING, header(), footer()) {
+    DBUG_TRACE;
+    String uuid_buf;
+    common_header->flags |= LOG_EVENT_IGNORABLE_F;
+    common_header->type_code = binary_log::DOMAIN_EVENT;
+    assert(uuid == nullptr);
+    assert(name_length == 0 && name == nullptr);
+    assert(aggregate_type_length == 0 && aggregate_type == nullptr);
+    assert(aggregate_id_length == 0 && aggregate_id == nullptr);
+    assert(payload_length == 0 && payload == nullptr);
+    // generate uuid
+    if (!(uuid = (unsigned char *)my_malloc(key_memory_log_event,
+                                  UUID_LENGTH, MYF(MY_WME)))) {
+      common_header->set_is_valid(false);
+      return;
+    }
+    mysql_generate_uuid(&uuid_buf);
+    memcpy(uuid, uuid_buf.ptr(), UUID_LENGTH);
+    // event name
+    name_length = name_arg.length;
+    if (!(name = (unsigned char *)my_malloc(key_memory_log_event,
+                                name_length, MYF(MY_WME)))) {
+      common_header->set_is_valid(false);
+      return;
+    }
+    memcpy(name, name_arg.str, name_length);
+    common_header->set_is_valid(name_length != 0 && name != nullptr);
+    // aggregate type
+    aggregate_type_length = aggregate_type_arg.length;
+    if (!(aggregate_type = (unsigned char *)my_malloc(key_memory_log_event,
+                                            aggregate_type_length, MYF(MY_WME)))) {
+      common_header->set_is_valid(false);
+      return;
+    }
+    memcpy(aggregate_type, aggregate_type_arg.str, aggregate_type_length);
+    common_header->set_is_valid(aggregate_type_length != 0 && aggregate_type != nullptr);
+    // aggregate id
+    aggregate_id_length = aggregate_id_arg.length;
+    if (!(aggregate_id = (unsigned char *)my_malloc(key_memory_log_event,
+                                          aggregate_id_length, MYF(MY_WME)))) {
+      common_header->set_is_valid(false);
+      return;
+    }
+    memcpy(aggregate_id, aggregate_id_arg.str, aggregate_id_length);
+    common_header->set_is_valid(aggregate_id_length != 0 && aggregate_id != nullptr);
+    // payload
+    payload_length = payload_arg.length;
+    if (!(payload = (unsigned char *)my_malloc(key_memory_log_event,
+                                payload_length, MYF(MY_WME)))) {
+      common_header->set_is_valid(false);
+      return;
+    }
+    memcpy(payload, payload_arg.str, payload_length);
+    common_header->set_is_valid(payload_length != 0 && payload != nullptr);
+    DBUG_PRINT("enter", ("%s", payload));
+    return;
+  }
+
+int Domain_log_event::pack_info(Protocol *protocol) {
+  char *buf;
+  size_t bytes;
+  size_t len = sizeof("# ") + payload_length;
+  if (!(buf = (char *)my_malloc(key_memory_log_event, len, MYF(MY_WME))))
+    return 1;
+  bytes = snprintf(buf, len, "# %s", payload);
+  protocol->store_string(buf, bytes, &my_charset_bin);
+  my_free(buf);
+  return 0;
+}
+
+bool Domain_log_event::write_data_header(Basic_ostream *ostream) {
+  DBUG_TRACE;
+  char buffer[Binary_log_event::DOMAIN_EVENT_HEADER_LEN];
+
+  memcpy(buffer + UUID_OFFSET, uuid, UUID_LENGTH);
+  int2store(buffer + NAME_LENGTH_OFFSET, name_length);
+  int2store(buffer + AGGREGATE_TYPE_LENGTH_OFFSET, aggregate_type_length);
+  int2store(buffer + AGGREGATE_ID_LENGTH_OFFSET, aggregate_id_length);
+  int8store(buffer + PAYLOAD_LENGTH_OFFSET, payload_length);
+  return wrapper_my_b_safe_write(ostream, (const uchar *)buffer,
+                                 Binary_log_event::DOMAIN_EVENT_HEADER_LEN);
+}
+
+bool Domain_log_event::write_data_body(Basic_ostream *ostream) {
+  DBUG_TRACE;
+
+  return (wrapper_my_b_safe_write(ostream, name, name_length) ||
+          wrapper_my_b_safe_write(ostream, aggregate_type, aggregate_type_length) ||
+          wrapper_my_b_safe_write(ostream, aggregate_id, aggregate_id_length) ||
+          wrapper_my_b_safe_write(ostream, payload, payload_length));
+}
+#endif
+
+#ifndef MYSQL_SERVER
+void Domain_log_event::print(FILE *,
+                               PRINT_EVENT_INFO *print_event_info) const {
+  if (print_event_info->short_form) return;
+  IO_CACHE *const head = &print_event_info->head_cache;
+  print_header(head, print_event_info, false);
+  my_b_printf(head, "\tDomain event");
+  my_b_printf(head, ", uuid: ");
+  my_b_write(head, pointer_cast<const uchar *>(uuid), UUID_LENGTH);
+  my_b_printf(head, ", name: ");
+  my_b_write(head, pointer_cast<const uchar *>(name), name_length);
+  my_b_printf(head, ", aggregate_type: ");
+  my_b_write(head, pointer_cast<const uchar *>(aggregate_type), aggregate_type_length);
+  my_b_printf(head, ", aggregate_id: ");
+  my_b_write(head, pointer_cast<const uchar *>(aggregate_id), aggregate_id_length);
+  my_b_printf(head, "\npayload (%zu): ", payload_length);
+  my_b_write(head, pointer_cast<const uchar *>(payload), payload_length);
+  my_b_printf(head, "\n%s\n", print_event_info->delimiter);
+}
+#endif

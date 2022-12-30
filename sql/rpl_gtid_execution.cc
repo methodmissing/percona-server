@@ -428,8 +428,9 @@ static bool is_stmt_innocent(const THD *thd) {
   bool is_do = (sql_command == SQLCOM_DO);
   bool is_empty = (sql_command == SQLCOM_EMPTY_QUERY);
   bool is_use = (sql_command == SQLCOM_CHANGE_DB);
+  bool is_domain_event = (sql_command == SQLCOM_DOMAIN_EVENT);
   return (is_set || is_set_role || is_query_block || is_do || is_show ||
-          is_empty || is_use) &&
+          is_empty || is_use || is_domain_event) &&
          !lex->uses_stored_routines();
 }
 

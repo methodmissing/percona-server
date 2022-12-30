@@ -3731,6 +3731,9 @@ struct LEX : public Query_tables_list {
   LEX_STRING binlog_stmt_arg = {
       nullptr, 0};  ///< Argument of the BINLOG event statement.
   LEX_STRING ident;
+  LEX_STRING event;
+  LEX_STRING aggregate_type;
+  LEX_STRING aggregate_id;
   LEX_USER *grant_user;
   LEX_ALTER alter_password;
   enum_alter_user_attribute alter_user_attribute;

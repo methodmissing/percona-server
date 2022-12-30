@@ -46,6 +46,7 @@
 #include "event_reader.h"
 #include "my_checksum.h"
 #include "my_io.h"
+#include "sql/sql_const.h"
 
 #if defined(_WIN32)
 #include <Winsock2.h>
@@ -349,6 +350,9 @@ enum Log_event_type {
   TRANSACTION_PAYLOAD_EVENT = 40,
 
   HEARTBEAT_LOG_EVENT_V2 = 41,
+
+  DOMAIN_EVENT = 42,
+
   /**
     Add new events here - right above this comment!
     Existing events (except ENUM_END_EVENT) should never change their numbers
@@ -852,7 +856,8 @@ class Binary_log_event {
     VIEW_CHANGE_HEADER_LEN = 52,
     XA_PREPARE_HEADER_LEN = 0,
     TRANSACTION_PAYLOAD_HEADER_LEN = 0,
-    START_5_7_ENCRYPTION_HEADER_LEN = 0
+    START_5_7_ENCRYPTION_HEADER_LEN = 0,
+    DOMAIN_EVENT_HEADER_LEN = (UUID_LENGTH + 2 + 2 + 2 + 8)
   };  // end enum_post_header_length
  protected:
   /**

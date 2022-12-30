@@ -4549,6 +4549,69 @@ std::pair<bool, binary_log::Log_event_basic_info> extract_log_event_basic_info(
     const binary_log::Format_description_event *fd_event);
 
 /**
+  @class Domain_log_event
+
+   Class representing an opaque event produced using the PRODUCE EVENT statement.
+   Useful for Transactional Outbox use cases where additional writes is not desirable.
+
+   @internal
+   The inheritance structure is as follows
+
+        Binary_log_event
+               ^
+               |
+               |
+  B_l:Domain_event   Log_event
+                \         /
+                 \       /
+                  \     /
+                   \   /
+         Domain_log_event
+
+  B_l: Namespace Binary_log
+  @endinternal
+
+*/
+class Domain_log_event : public binary_log::Domain_event,
+                           public Log_event {
+ public:
+
+#ifdef MYSQL_SERVER
+  Domain_log_event(THD *thd, LEX_STRING name_arg, LEX_STRING aggregate_type_arg, LEX_STRING aggregate_id_arg, LEX_STRING payload_arg);
+  int pack_info(Protocol *) override;
+  bool write_data_header(Basic_ostream *ostream) override;
+  bool write_data_body(Basic_ostream *ostream) override;
+#endif
+
+  Domain_log_event(const char *buf,
+                     const Format_description_event *descr_event);
+
+  ~Domain_log_event() override {
+    if (uuid) bapi_free(uuid);
+    uuid = nullptr;
+    if (name) bapi_free(name);
+    name = nullptr;
+    name_length = 0;
+    if (aggregate_type) bapi_free(aggregate_type);
+    aggregate_type = nullptr;
+    aggregate_type_length = 0;
+    if (aggregate_id) bapi_free(aggregate_id);
+    aggregate_id = nullptr;
+    aggregate_id_length = 0;
+    if (payload) bapi_free(payload);
+    payload = nullptr;
+    payload_length = 0;
+  }
+#ifndef MYSQL_SERVER
+  void print(FILE *file, PRINT_EVENT_INFO *print_event_info) const override;
+#endif
+
+  size_t get_data_size() override {
+    return Binary_log_event::DOMAIN_EVENT_HEADER_LEN + name_length + aggregate_type_length + aggregate_id_length + payload_length;
+  }
+};
+
+/**
   @} (end of group Replication)
 */
 

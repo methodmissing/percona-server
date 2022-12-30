@@ -136,7 +136,8 @@ Format_description_event::Format_description_event(uint8_t binlog_ver,
           Gtid_event::POST_HEADER_LENGTH, /*ANONYMOUS_GTID_EVENT*/
           IGNORABLE_HEADER_LEN, TRANSACTION_CONTEXT_HEADER_LEN,
           VIEW_CHANGE_HEADER_LEN, XA_PREPARE_HEADER_LEN, ROWS_HEADER_LEN_V2,
-          TRANSACTION_PAYLOAD_EVENT, 0 /* HEARTBEAT_LOG_EVENT_V2*/
+          TRANSACTION_PAYLOAD_EVENT, 0, /* HEARTBEAT_LOG_EVENT_V2*/
+          DOMAIN_EVENT_HEADER_LEN
       };
       /*
         Allows us to sanity-check that all events initialized their

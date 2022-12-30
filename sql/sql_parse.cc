@@ -160,6 +160,7 @@
 #include "sql/sql_lex.h"
 #include "sql/sql_list.h"
 #include "sql/sql_prepare.h"  // mysql_stmt_execute
+#include "sql/sql_domain_event.h"
 #include "sql/sql_profile.h"
 #include "sql/sql_query_rewrite.h"  // invoke_pre_parse_rewrite_plugins
 #include "sql/sql_reload.h"         // handle_reload_request
@@ -599,6 +600,7 @@ void init_sql_command_flags() {
   sql_command_flags[SQLCOM_SHOW_PROFILE] = CF_STATUS_COMMAND;
   sql_command_flags[SQLCOM_BINLOG_BASE64_EVENT] =
       CF_STATUS_COMMAND | CF_CAN_GENERATE_ROW_EVENTS;
+  sql_command_flags[SQLCOM_DOMAIN_EVENT] = CF_CAN_GENERATE_ROW_EVENTS;
 
   sql_command_flags[SQLCOM_SHOW_TABLES] =
       (CF_STATUS_COMMAND | CF_SHOW_TABLE_COMMAND | CF_HAS_RESULT_SET |
@@ -851,6 +853,7 @@ void init_sql_command_flags() {
       CF_DISALLOW_IN_RO_TRANS;
   sql_command_flags[SQLCOM_DROP_COMPRESSION_DICTIONARY] |=
       CF_DISALLOW_IN_RO_TRANS;
+  sql_command_flags[SQLCOM_DOMAIN_EVENT] |= CF_DISALLOW_IN_RO_TRANS;
 
   /*
     Mark statements that are allowed to be executed by the plugins.
@@ -1007,6 +1010,7 @@ void init_sql_command_flags() {
   sql_command_flags[SQLCOM_SHOW_INDEX_STATS] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_SHOW_CLIENT_STATS] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_SHOW_THREAD_STATS] |= CF_ALLOW_PROTOCOL_PLUGIN;
+  sql_command_flags[SQLCOM_DOMAIN_EVENT] |= CF_ALLOW_PROTOCOL_PLUGIN;
 
   /*
     Mark DDL statements which require that auto-commit mode to be temporarily
@@ -4742,6 +4746,10 @@ int mysql_execute_command(THD *thd, bool first_level) {
         goto error;
       /* Conditionally writes to binlog. */
       res = mysql_drop_view(thd, first_table);
+      break;
+    }
+    case SQLCOM_DOMAIN_EVENT: {
+      res = mysql_domain_event_statement(thd, lex->name, lex->aggregate_type, lex->aggregate_id, lex->event);
       break;
     }
     case SQLCOM_CREATE_TRIGGER:

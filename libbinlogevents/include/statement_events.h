@@ -1067,6 +1067,136 @@ type_code as RAND_EVENT in the header object in Binary_log_event
   void print_long_info(std::ostream &info) override;
 #endif
 };
+
+/**
+  @class Domain_event
+
+   Class representing an opaque event produced using the DOMAIN EVENT statement.
+
+   Useful for Transactional Outbox use cases where additional writes is not desirable.
+
+  @section Domain_event_binary_format Binary Format
+
+   <table id="DomainFormat">
+   <caption>Domain event format</caption>
+   <tr>
+     <th>Symbol</th>
+     <th>Format</th>
+     <th>Description</th>
+   </tr>
+   <tr>
+     <td>UUID</td>
+     <td align="right">1</td>
+     <td>The event UUID. Not null terminated.</td>
+   </tr>
+   <tr>
+     <td>NAMELEN</td>
+     <td align="right">1</td>
+     <td>Event name length as an unsigned integer</td>
+   </tr>
+   <tr>
+     <td>AGGREGATETYPELENGTH</td>
+     <td align="right">1</td>
+     <td>Aggregate type length as an unsigned integer</td>
+   </tr>
+   <tr>
+     <td>AGGREGATEIDLENGTH</td>
+     <td align="right">1</td>
+     <td>Aggregate id length as an unsigned integer</td>
+   </tr>
+   <tr>
+     <td>PAYLOADLEN</td>
+     <td align="right">1</td>
+     <td>Event payload length as an unsigned integer</td>
+   </tr>
+   <tr>
+     <td>NAME</td>
+     <td align="right">NAMELEN</td>
+     <td>The event name. Not null terminated.</td>
+   </tr>
+   <tr>
+     <td>AGGREGATETYPE</td>
+     <td align="right">AGGREGATETYPELEN</td>
+     <td>The event aggregate type. Not null terminated.</td>
+   </tr>
+   <tr>
+     <td>AGGREGATEID</td>
+     <td align="right">AGGREGATEIDLEN</td>
+     <td>The event aggregate id. Not null terminated.</td>
+   </tr>
+   </table>
+*/
+
+class Domain_event : public Binary_log_event {
+ public:
+  unsigned char *get_uuid() { return uuid; }
+  unsigned char *get_name() { return name; }
+  unsigned char *get_aggregate_type() { return aggregate_type; }
+  unsigned char *get_aggregate_id() { return aggregate_id; }
+  unsigned char *get_payload() { return payload; }
+
+  /**
+    This will create a Domain_event with an empty event and set the
+    type_code as DOMAIN_EVENT in the header object in Binary_log_event.
+  */
+  explicit Domain_event()
+      : Binary_log_event(DOMAIN_EVENT),
+        uuid(nullptr),
+        name_length(0),
+        aggregate_type_length(0),
+        aggregate_id_length(0),
+        payload_length(0),
+        name(nullptr),
+        aggregate_type(nullptr),
+        aggregate_id(nullptr),
+        payload(nullptr) {}
+
+  /**
+    Constructor of Domain_event
+    The buffer layout is as follows:
+    <pre>
+    +------------------------------------------------------------------------------------------------------------------------------------+
+    | uuid | name_length | aggregate_type_length | aggregate_id_length | payload_length | name | aggregate_type | aggregate_id | payload |                               |
+    +------------------------------------------------------------------------------------------------------------------------------------+
+    </pre>
+
+    @param buf  Contains the serialized event.
+    @param fde  An FDE event (see Rotate_event constructor for more info).
+  */
+  Domain_event(const char *buf, const Format_description_event *fde);
+#ifndef HAVE_MYSYS
+  void print_event_info(std::ostream &info) override;
+  void print_long_info(std::ostream &info) override;
+#endif
+ protected:
+
+  // The values mentioned on the next class constants is the offset where the
+  // data that will be copied in the buffer.
+
+  // 36 bytes UUID length.
+  static const int UUID_OFFSET = 0;
+  // 2 bytes name length.
+  static const int NAME_LENGTH_OFFSET = UUID_LENGTH;
+  // 2 bytes aggregate type length.
+  static const int AGGREGATE_TYPE_LENGTH_OFFSET = NAME_LENGTH_OFFSET + 2;
+  // 2 bytes aggregate id length.
+  static const int AGGREGATE_ID_LENGTH_OFFSET = AGGREGATE_TYPE_LENGTH_OFFSET + 2;
+  // 8 bytes payload length.
+  static const int PAYLOAD_LENGTH_OFFSET = AGGREGATE_ID_LENGTH_OFFSET + 2;
+
+  // header
+  unsigned char *uuid;
+  size_t name_length;
+  size_t aggregate_type_length;
+  size_t aggregate_id_length;
+  size_t payload_length;
+  // body
+  unsigned char *name;
+  unsigned char *aggregate_type;
+  unsigned char *aggregate_id;
+  unsigned char *payload;
+};
+
 }  // end namespace binary_log
 /**
   @} (end of group Replication)

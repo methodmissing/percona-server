@@ -507,6 +507,44 @@ Rand_event::Rand_event(const char *buf, const Format_description_event *fde)
   BAPI_VOID_RETURN;
 }
 
+Domain_event::Domain_event(const char *buf, const Format_description_event *fde)
+    : Binary_log_event(&buf, fde), uuid(nullptr), name_length(0), aggregate_type_length(0), aggregate_id_length(0), payload_length(0), name(nullptr), aggregate_type(nullptr), aggregate_id(nullptr), payload(nullptr) {
+  BAPI_ENTER("Domain_event::Domain_event(const char*, ...)");
+  READER_TRY_INITIALIZATION;
+  READER_ASSERT_POSITION(fde->common_header_len);
+
+  // uuid
+  READER_TRY_CALL(alloc_and_memcpy, &uuid, UUID_LENGTH, 0);
+  if (uuid == nullptr) READER_THROW("Invalid event uuid");
+  // name length
+  READER_TRY_SET(name_length, read<uint16_t>);
+  if (name_length == 0) READER_THROW("Invalid event name length");
+  // aggregate type length
+  READER_TRY_SET(aggregate_type_length, read<uint16_t>);
+  if (aggregate_type_length == 0) READER_THROW("Invalid aggregate type length");
+  // aggregate id length
+  READER_TRY_SET(aggregate_id_length, read<uint16_t>);
+  if (aggregate_id_length == 0) READER_THROW("Invalid aggregate id length");
+  // payload length
+  READER_TRY_SET(payload_length, read<uint64_t>);
+  if (payload_length == 0) READER_THROW("Invalid event length");
+  // name
+  READER_TRY_CALL(alloc_and_memcpy, &name, name_length, 0);
+  if (name == nullptr) READER_THROW("Invalid name");
+  // aggregate type
+  READER_TRY_CALL(alloc_and_memcpy, &aggregate_type, aggregate_type_length, 0);
+  if (aggregate_type == nullptr) READER_THROW("Invalid aggregate type");
+  // aggregate id
+  READER_TRY_CALL(alloc_and_memcpy, &aggregate_id, aggregate_id_length, 0);
+  if (aggregate_id == nullptr) READER_THROW("Invalid aggregate id");
+  // payload
+  READER_TRY_CALL(alloc_and_memcpy, &payload, payload_length, 0);
+  if (payload == nullptr) READER_THROW("Invalid payload");
+
+  READER_CATCH_ERROR;
+  BAPI_VOID_RETURN;
+}
+
 #ifndef HAVE_MYSYS
 void Query_event::print_event_info(std::ostream &info) {
   if (memcmp(query, "BEGIN", 5) != 0 && memcmp(query, "COMMIT", 6) != 0) {

@@ -1368,6 +1368,10 @@ void warn_about_deprecated_binary(THD *thd)
 %token<lexer.keyword> CHALLENGE_RESPONSE_SYM     1198      /* MYSQL */
 
 %token<lexer.keyword> GTID_ONLY_SYM 1199                       /* MYSQL */
+%token<lexer.keyword> DOMAIN_SYM 1200                      /* MYSQL */
+%token<lexer.keyword> PAYLOAD_SYM 1201                     /* MYSQL */
+%token<lexer.keyword> AGGREGATE_ID_SYM 1202                /* MYSQL */
+%token<lexer.keyword> AGGREGATE_TYPE_SYM 1203              /* MYSQL */
 
 /*
    Tokens from Percona Server 5.7 and older
@@ -1866,6 +1870,7 @@ void warn_about_deprecated_binary(THD *thd)
         delete_stmt
         describe_stmt
         do_stmt
+        domain_event_stmt
         drop_index_stmt
         drop_resource_group_stmt
         drop_role_stmt
@@ -2334,6 +2339,7 @@ simple_statement:
         | delete_stmt
         | describe_stmt
         | do_stmt
+        | domain_event_stmt
         | drop_database_stmt            { $$= nullptr; }
         | drop_event_stmt               { $$= nullptr; }
         | drop_function_stmt            { $$= nullptr; }
@@ -9713,6 +9719,17 @@ binlog_base64_event:
           }
         ;
 
+domain_event_stmt:
+          DOMAIN_SYM EVENT_SYM TEXT_STRING_literal FOR_SYM AGGREGATE_TYPE_SYM TEXT_STRING_literal AND_SYM AGGREGATE_ID_SYM TEXT_STRING_literal WITH PAYLOAD_SYM TEXT_STRING_literal
+          {
+            Lex->sql_command = SQLCOM_DOMAIN_EVENT;
+            Lex->name= $3;
+            Lex->aggregate_type= $6;
+            Lex->aggregate_id= $9;
+            Lex->event= $12;
+          }
+        ;
+
 check_table_stmt:
           CHECK_SYM table_or_tables table_list opt_mi_check_types
           {
@@ -15392,7 +15409,8 @@ ident_keywords_unambiguous:
         | ADMIN_SYM
         | AFTER_SYM
         | AGAINST
-        | AGGREGATE_SYM
+        | AGGREGATE_ID_SYM
+        | AGGREGATE_TYPE_SYM
         | ALGORITHM_SYM
         | ALWAYS_SYM
         | ANY_SYM

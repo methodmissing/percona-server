@@ -1154,7 +1154,7 @@ static bool shall_skip_gtids(const Log_event *ev) {
       break;
 
     /*
-      Never skip STOP, FD, ROTATE, IGNORABLE or INCIDENT events.
+      Never skip STOP, FD, ROTATE, IGNORABLE, INCIDENT or DOMAIN events.
       SLAVE_EVENT and START_EVENT_V3 are there for completion.
 
       Although in the binlog transactions do not span multiple
@@ -1175,6 +1175,7 @@ static bool shall_skip_gtids(const Log_event *ev) {
     case binary_log::ROTATE_EVENT:
     case binary_log::IGNORABLE_LOG_EVENT:
     case binary_log::INCIDENT_EVENT:
+    case binary_log::DOMAIN_EVENT:
       filtered = false;
       break;
     default:
@@ -1425,6 +1426,10 @@ static Exit_status process_event(PRINT_EVENT_INFO *print_event_info,
 
     switch (ev_type) {
       case binary_log::TRANSACTION_PAYLOAD_EVENT:
+        ev->print(result_file, print_event_info);
+        if (head->error == -1) goto err;
+        break;
+      case binary_log::DOMAIN_EVENT:
         ev->print(result_file, print_event_info);
         if (head->error == -1) goto err;
         break;
